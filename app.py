@@ -382,4 +382,12 @@ def api_alerts_stream():
 if __name__ == '__main__':
     import warnings
     warnings.filterwarnings('ignore')
-    app.run(host=FLASK_HOST, port=FLASK_PORT, debug=False, threaded=True)
+
+    port = int(os.environ.get("PORT", 10000))
+
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False,
+        threaded=True
+    )
