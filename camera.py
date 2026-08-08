@@ -75,7 +75,12 @@ class CameraProcessor:
         try:
             from ultralytics import YOLO
             from config import HELMET_MODEL_PATH
+            from dotenv import load_dotenv
             import os
+            load_dotenv()
+            if os.getenv("RENDER") == "true":
+                print("[helmet] RENDER=true - skipping helmet model loading")
+                return None
             if os.path.exists(HELMET_MODEL_PATH):
                 model = YOLO(HELMET_MODEL_PATH)
                 print(f"[helmet] Loaded: {HELMET_MODEL_PATH}")

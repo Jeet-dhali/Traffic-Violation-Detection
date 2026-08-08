@@ -8,6 +8,7 @@ CUSTOMISATION:
 """
 
 import os
+from dotenv import load_dotenv
 from ultralytics import YOLO
 from config import (
     TRAFFIC_MODEL_PATH, HELMET_MODEL_PATH,
@@ -16,17 +17,26 @@ from config import (
     NO_HELMET_CLASS_ID,              # was missing from config.py — now added
 )
 
+load_dotenv()  # Load environment variables from .env file
+
 # ─── Load traffic model ───────────────────────────────────────────────────────
-print(f"[MODEL] Loading traffic model: {TRAFFIC_MODEL_PATH}")
-traffic_model = YOLO(TRAFFIC_MODEL_PATH)
+traffic_model = None
+if os.getenv("RENDER") != "true":
+    print(f"[MODEL] Loading traffic model: {TRAFFIC_MODEL_PATH}")
+    traffic_model = YOLO(TRAFFIC_MODEL_PATH)
+else:
+    print("[MODEL] RENDER=true - skipping traffic model loading")
 
 # ─── Load helmet model (optional) ────────────────────────────────────────────
 helmet_model = None
-if HELMET_MODEL_PATH and os.path.exists(HELMET_MODEL_PATH):
-    print(f"[MODEL] Loading helmet model: {HELMET_MODEL_PATH}")
-    helmet_model = YOLO(HELMET_MODEL_PATH)
+if os.getenv("RENDER") != "true":
+    if HELMET_MODEL_PATH and os.path.exists(HELMET_MODEL_PATH):
+        print(f"[MODEL] Loading helmet model: {HELMET_MODEL_PATH}")
+        helmet_model = YOLO(HELMET_MODEL_PATH)
+    else:
+        print("[MODEL] Helmet model not found — helmet detection disabled")
 else:
-    print("[MODEL] Helmet model not found — helmet detection disabled")
+    print("[MODEL] RENDER=true - skipping helmet model loading")
 
 
 def detect_vehicles_and_persons(frame):
@@ -34,6 +44,8 @@ def detect_vehicles_and_persons(frame):
     Run traffic model on a full frame.
     Returns ultralytics Results object with tracking IDs.
     """
+    if traffic_model is None:
+        return None
     results = traffic_model.track(
         frame,
         persist=True,

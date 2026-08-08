@@ -13,21 +13,46 @@ from config import (
 from camera import CameraProcessor
 from database import get_violations, get_stats, mark_reviewed, init_db, get_comprehensive_analytics
 import violations as viol_module
-from google import genai
-from google.genai import types
-import matplotlib.pyplot as plt
-import matplotlib
 from api_chat_patch import api_chat
 from alerts import stream as alert_stream
-matplotlib.use('Agg')  # Use non-interactive backend
 
 load_dotenv()  # Load environment variables from .env file
+
+# Conditionally import genai (only needed if API_KEY is provided)
+genai = None
+types = None
 api_key = os.getenv('API_KEY')
+if api_key:
+    try:
+        from google import genai
+        from google.genai import types
+        print("[GENAI] Google GenAI libraries loaded")
+    except ImportError:
+        print("[GENAI] Google GenAI libraries not available - install with: pip install google-genai")
+        api_key = None
+else:
+    print("[GENAI] API_KEY not found - skipping Google GenAI import")
+
+# Conditionally import matplotlib (heavy library, only needed for charts)
+matplotlib = None
+plt = None
+if os.getenv("RENDER") != "true":
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.use('Agg')  # Use non-interactive backend
+else:
+    print("[MATPLOTLIB] RENDER=true - skipping matplotlib import")
+
 app = Flask(__name__)
 
 # ---------------- Gemini ---------------- #
 
-client = genai.Client(api_key=api_key)
+client = None
+if genai is not None and api_key:
+    client = genai.Client(api_key=api_key)
+    print("[GEMINI] Client initialized")
+else:
+    print("[GEMINI] Client not initialized - genai unavailable or no API_KEY")
 
 # ── Init DB ──────────────────────────────────────────────────────
 init_db()
@@ -35,15 +60,17 @@ init_db()
 # ── Camera processors ────────────────────────────────────────────
 cameras: dict[str, CameraProcessor] = {}
 
-cam_laptop = CameraProcessor(
-    cam_id='laptop',
-    name='Laptop Camera',
-    location='Main Entrance',
-    source=CAM_LAPTOP_SOURCE,
-    backend=cv2.CAP_ANY,    # macOS — remove or change to cv2.CAP_ANY on Linux/Windows
-)
-cam_laptop.start()
-cameras['laptop'] = cam_laptop
+if os.getenv("RENDER") != "true":
+    cam_laptop = CameraProcessor(
+        cam_id='laptop',
+        name='Laptop Camera',
+        location='Main Entrance',
+        source=CAM_LAPTOP_SOURCE,
+        backend=cv2.CAP_ANY,
+    )
+
+    cam_laptop.start()
+    cameras['laptop'] = cam_laptop
 
 if CAM_PI_SOURCE is not None:
     cam_pi = CameraProcessor(
@@ -285,6 +312,12 @@ def create_pattern_chart(pattern_data, pattern_type="hourly", title="Violation P
 @app.route('/api/analytics/charts', methods=["GET"])
 def api_analytics_charts():
     """Generate and return charts based on analytics data."""
+    if plt is None or matplotlib is None:
+        return jsonify({
+            "error": "Chart generation disabled in deployment mode",
+            "charts": {}
+        }), 503
+    
     try:
         analytics = get_comprehensive_analytics()
         charts = {}
@@ -373,6 +406,8 @@ def api_analytics_charts():
 
 @app.route("/api/chat", methods=["POST"])
 def chat_route():
+    if client is None:
+        return jsonify({"reply": "Chat functionality is disabled - API_KEY not configured."}), 503
     return api_chat(client, cameras)
 
 @app.route('/api/alerts/stream')
